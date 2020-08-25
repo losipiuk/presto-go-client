@@ -195,6 +195,22 @@ type Conn struct {
 	httpHeaders     http.Header
 	kerberosClient  client.Client
 	kerberosEnabled bool
+	callback        QueryCallback
+}
+
+
+func (c *Conn) CheckNamedValue(value *driver.NamedValue) error {
+	callback, ok := value.Value.(QueryCallback)
+	if (ok) {
+		c.callback = callback
+		return driver.ErrRemoveArgument
+	}
+	return driver.ErrSkip
+}
+
+func (c *Conn) ResetSession(ctx context.Context) error {
+	c.callback = nil
+	return nil
 }
 
 var (
@@ -555,6 +571,10 @@ func (st *driverStmt) Query(args []driver.Value) (driver.Rows, error) {
 func (st *driverStmt) QueryContext(ctx context.Context, args []driver.NamedValue) (driver.Rows, error) {
 	query := st.query
 	var hs http.Header
+
+	if (st.conn.callback != nil) {
+		st.conn.callback.queryStarted()
+	}
 
 	if len(args) > 0 {
 		hs = make(http.Header)
@@ -1550,4 +1570,10 @@ func (s *NullSlice3Map) Scan(value interface{}) error {
 	s.Slice3Map = slice
 	s.Valid = true
 	return nil
+}
+
+type QueryCallback interface{
+	queryStarted()
+	queryProgress()
+	queryFinished()
 }
